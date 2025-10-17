@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>抽取历史 · Hello Kitty 惊喜盲盒</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">🎀</div>
+        <h1>与你的记忆 📒</h1>
+      </div>
+      <div class="energy">
+        <a href="index.html" class="btn">返回 ⬅️</a>
+        <button id="btn-export" class="btn ghost" title="导出CSV">导出 ⬇️</button>
+        <button id="btn-clear-history" class="btn ghost" title="清空与你的记忆">清空 🗑️</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="history-tools">
+        <form id="manual-form" class="manual-form" onsubmit="return false;">
+          <select id="manual-type" title="类型">
+            <option value="sweet">甜心小确幸</option>
+            <option value="heart">心动宝贝</option>
+            <option value="romance">浪漫时光盒子</option>
+            <option value="energy">恋爱能量</option>
+          </select>
+          <input id="manual-content" type="text" maxlength="60" placeholder="点滴/奖励内容" />
+          <input id="manual-cost" type="number" min="0" max="999" placeholder="消耗(可选)" />
+          <input id="manual-time" type="datetime-local" />
+          <button id="manual-add" class="btn primary">添加</button>
+        </form>
+      </section>
+
+      <section class="history">
+        <ul id="history-list" class="history-list"></ul>
+      </section>
+    </main>
+
+    <script src="history.js" defer></script>
+  </body>
+  </html>
+
+
