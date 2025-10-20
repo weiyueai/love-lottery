@@ -195,7 +195,11 @@ function sendNotification(title, body, icon = '🎁') {
 
 // 发送微信通知
 function sendWechatNotification(record) {
-  const SENDKEY = 'SCT299941TXDDh9DbZvgkPlr72EvVmD0Gm';
+  // 配置多个SendKey - 添加您的第二个SendKey
+  const SENDKEYS = [
+    'SCT299941TXDDh9DbZvgkPlr72EvVmD0Gm',  // 第一个微信账号
+    'YOUR_SECOND_SENDKEY_HERE'              // 第二个微信账号 - 请替换为真实SendKey
+  ];
   
   let title = 'Hello Kitty新记录';
   let content = '';
@@ -206,52 +210,75 @@ function sendWechatNotification(record) {
     content = `抽奖成功\n奖池: ${record.boxLabel}\n奖品: ${record.reward}\n剩余能量: ${energy}`;
   }
   
-  // 发送到Server酱
-  fetch(`https://sctapi.ftqq.com/${SENDKEY}.send`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: `title=${encodeURIComponent(title)}&desp=${encodeURIComponent(content)}`
-  }).then(response => response.json()).then(data => {
-    if (data.code === 0) {
-      console.log('✅ 微信通知发送成功');
-    } else {
-      console.error('❌ 微信通知发送失败:', data.message);
+  // 同时发送到所有配置的微信账号
+  SENDKEYS.forEach((sendkey, index) => {
+    if (sendkey && sendkey !== 'YOUR_SECOND_SENDKEY_HERE') {
+      fetch(`https://sctapi.ftqq.com/${sendkey}.send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: `title=${encodeURIComponent(title)}&desp=${encodeURIComponent(content)}`
+      }).then(response => response.json()).then(data => {
+        if (data.code === 0) {
+          console.log(`✅ 微信通知${index + 1}发送成功`);
+        } else {
+          console.error(`❌ 微信通知${index + 1}发送失败:`, data.message);
+        }
+      }).catch(error => {
+        console.error(`❌ 微信通知${index + 1}发送失败:`, error);
+      });
     }
-  }).catch(error => {
-    console.error('❌ 微信通知发送失败:', error);
   });
 }
 
 // 测试微信通知功能
 function testWechatNotification() {
-  const testRecord = {
-    box: 'test',
-    boxLabel: '测试通知',
-    reward: '微信通知功能测试',
-    cost: 0,
-    time: formatTime(now())
-  };
+  // 配置多个SendKey - 与通知函数保持一致
+  const SENDKEYS = [
+    'SCT299941TXDDh9DbZvgkPlr72EvVmD0Gm',  // 第一个微信账号
+    'YOUR_SECOND_SENDKEY_HERE'              // 第二个微信账号 - 请替换为真实SendKey
+  ];
   
-  fetch('https://sctapi.ftqq.com/SCT299941TXDDh9DbZvgkPlr72EvVmD0Gm.send', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: 'title=' + encodeURIComponent('Hello Kitty通知测试') + '&desp=' + encodeURIComponent('如果收到这条消息，说明微信通知功能正常工作！\n时间: ' + new Date().toLocaleString())
-  }).then(response => response.json()).then(data => {
-    if (data.code === 0) {
-      console.log('✅ 测试通知发送成功，请检查微信');
-      toast('测试通知已发送，请检查微信');
-    } else {
-      console.error('❌ 测试通知发送失败:', data.message);
-      toast('测试通知发送失败');
+  const testTitle = 'Hello Kitty通知测试';
+  const testContent = '如果收到这条消息，说明微信通知功能正常工作！\n时间: ' + new Date().toLocaleString();
+  
+  let successCount = 0;
+  let totalCount = 0;
+  
+  // 发送到所有配置的微信账号
+  SENDKEYS.forEach((sendkey, index) => {
+    if (sendkey && sendkey !== 'YOUR_SECOND_SENDKEY_HERE') {
+      totalCount++;
+      fetch(`https://sctapi.ftqq.com/${sendkey}.send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: `title=${encodeURIComponent(testTitle)}&desp=${encodeURIComponent(testContent)}`
+      }).then(response => response.json()).then(data => {
+        if (data.code === 0) {
+          successCount++;
+          console.log(`✅ 测试通知${index + 1}发送成功`);
+          
+          // 所有通知发送完毕后显示结果
+          if (successCount === totalCount) {
+            toast(`测试通知已发送到${totalCount}个微信，请检查微信`);
+          }
+        } else {
+          console.error(`❌ 测试通知${index + 1}发送失败:`, data.message);
+          toast(`测试通知${index + 1}发送失败`);
+        }
+      }).catch(error => {
+        console.error(`❌ 测试通知${index + 1}发送失败:`, error);
+        toast(`测试通知${index + 1}发送失败`);
+      });
     }
-  }).catch(error => {
-    console.error('❌ 测试通知发送失败:', error);
-    toast('测试通知发送失败');
   });
+  
+  if (totalCount === 0) {
+    toast('请先配置有效的SendKey');
+  }
 }
 
 // 在控制台提供测试函数
