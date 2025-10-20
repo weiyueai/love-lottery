@@ -20,14 +20,14 @@ async function initCloudSync() {
       const lcConfig = await import('./leancloud-config.js');
       if (lcConfig.isLeanCloudConfigured()) {
         console.log('🌐 使用LeanCloud');
-        module = await import('./leancloud-auth.js');
+               module = await import('./leancloud-auth.js?v=' + Date.now());
       } else {
         throw new Error('LeanCloud未配置');
       }
     } catch (lcError) {
       // LeanCloud未配置，尝试Firebase
       console.log('🌐 使用Firebase');
-      module = await import('./firebase-auth.js');
+      module = await import('./firebase-auth.js?v=' + Date.now());
     }
     
     firebaseSync = module;
@@ -715,9 +715,9 @@ function verifyPasswordDialog() {
     // 确认
     const verify = async () => {
       const inputPassword = input.value.trim();
-      const savedPassword = sessionStorage.getItem('kitty_password');
       
-      if (inputPassword === savedPassword) {
+      // 设置密码固定为 011208
+      if (inputPassword === '011208') {
         dialog.close();
         dialog.remove();
         resolve(true);
