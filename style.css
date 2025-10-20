@@ -678,4 +678,60 @@ dialog * { pointer-events: auto !important; }
   .earn-custom { grid-column: span 2; }
 }
 
+/* 密码验证对话框样式 */
+.password-verify-dialog {
+  z-index: 9999 !important;
+  padding: 0;
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.password-verify-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 9998 !important;
+}
+
+.password-verify-form {
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px;
+  min-width: min(420px, 90vw);
+}
+
+.password-verify-form h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  color: #333;
+  text-align: center;
+}
+
+.password-verify-input {
+  margin: 20px 0;
+}
+
+.password-verify-input input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  font-size: 18px;
+  text-align: center;
+  letter-spacing: 8px;
+  transition: all 0.2s ease;
+  font-family: monospace;
+}
+
+.password-verify-input input:focus {
+  outline: none;
+  border-color: #6c7ae0;
+  box-shadow: 0 0 0 3px rgba(108, 122, 224, 0.1);
+}
+
+.password-verify-input input::placeholder {
+  letter-spacing: normal;
+  font-family: inherit;
+  font-size: 14px;
+}
+
 

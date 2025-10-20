@@ -6,6 +6,55 @@ const STORAGE_KEYS = {
   pools: "kitty_pools"
 };
 
+// Firebase同步模块（动态加载）
+let firebaseSync = null;
+let cloudSyncEnabled = false;
+
+// 初始化云端同步（自动选择LeanCloud或Firebase）
+async function initCloudSync() {
+  try {
+    let module;
+    
+    // 优先尝试LeanCloud
+    try {
+      const lcConfig = await import('./leancloud-config.js');
+      if (lcConfig.isLeanCloudConfigured()) {
+        console.log('🌐 使用LeanCloud');
+        module = await import('./leancloud-auth.js');
+      } else {
+        throw new Error('LeanCloud未配置');
+      }
+    } catch (lcError) {
+      // LeanCloud未配置，尝试Firebase
+      console.log('🌐 使用Firebase');
+      module = await import('./firebase-auth.js');
+    }
+    
+    firebaseSync = module;
+    cloudSyncEnabled = true;
+    console.log('✅ 云端同步已启用');
+    
+    // 监听云端数据变化
+    const unsubscribe = await firebaseSync.listenToCloudChanges((data) => {
+      // 检测到云端更新，同步到本地
+      if (data.energy !== undefined && data.energy !== energy) {
+        energy = data.energy;
+        renderEnergy();
+      }
+      if (data.history && JSON.stringify(data.history) !== JSON.stringify(drawHistory)) {
+        drawHistory = data.history;
+        renderHistory();
+      }
+      if (data.pools && JSON.stringify(data.pools) !== JSON.stringify(POOLS)) {
+        POOLS = data.pools;
+      }
+    });
+  } catch (error) {
+    console.log('📱 云端同步未启用，使用本地存储模式');
+    cloudSyncEnabled = false;
+  }
+}
+
 const BOX_COSTS = { sweet: 10, heart: 25, romance: 50 };
 
 let POOLS = {
@@ -49,10 +98,20 @@ function loadState() {
 }
 
 function saveState() {
+  // 保存到本地存储
   localStorage.setItem(STORAGE_KEYS.energy, String(energy));
   localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(drawHistory));
   if (armedBox) localStorage.setItem(STORAGE_KEYS.armedBox, armedBox); else localStorage.removeItem(STORAGE_KEYS.armedBox);
   localStorage.setItem(STORAGE_KEYS.pools, JSON.stringify(POOLS));
+  
+  // 同步到云端
+  if (cloudSyncEnabled && firebaseSync) {
+    firebaseSync.syncToCloud({
+      energy: energy,
+      history: drawHistory,
+      pools: POOLS
+    }).catch(err => console.error('同步失败:', err));
+  }
 }
 
 function renderEnergy() { 
@@ -446,12 +505,31 @@ function bind() {
     });
   }
 
-  // Settings
-  if ($("#btn-settings")) {
-    $("#btn-settings").addEventListener("click", (e) => {
+  // Logout button
+  if ($("#btn-logout")) {
+    $("#btn-logout").addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      openSettings();
+      
+      if (confirm('确定要退出登录吗？\n退出后需要重新输入密码才能访问。')) {
+        sessionStorage.removeItem('kitty_logged_in');
+        sessionStorage.removeItem('kitty_password');
+        window.location.href = 'login.html';
+      }
+    });
+  }
+
+  // Settings
+  if ($("#btn-settings")) {
+    $("#btn-settings").addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // 验证密码
+      const verified = await verifyPasswordDialog();
+      if (verified) {
+        openSettings();
+      }
     });
   }
   const btnSavePools = $("#btn-save-pools");
@@ -491,12 +569,24 @@ function updateDaysDisplay() {
 
 /* Init */
 function init() {
+  // 检查登录状态
+  const isLoggedIn = sessionStorage.getItem('kitty_logged_in') === 'true';
+  if (!isLoggedIn && window.location.pathname.indexOf('login.html') === -1) {
+    window.location.href = 'login.html';
+    return;
+  }
+  
   loadState();
   renderEnergy();
   renderHistory();
   updateDaysDisplay(); // 更新在一起天数
   bind();
   bindTapProgress();
+  
+  // 初始化云端同步
+  if (isLoggedIn) {
+    initCloudSync();
+  }
 }
 
 
@@ -581,6 +671,78 @@ function onPreviewPools(e) {
     `浪漫时光盒子：${Array.from({length:5}).map(()=>sample(romance)).join("、")}`
   ];
   toast(lines.join(" \n "));
+}
+
+/* 密码验证对话框 */
+function verifyPasswordDialog() {
+  return new Promise((resolve) => {
+    // 创建对话框
+    const dialog = document.createElement('dialog');
+    dialog.className = 'password-verify-dialog';
+    dialog.innerHTML = `
+      <form method="dialog" class="password-verify-form">
+        <h3>🔐 验证密码</h3>
+        <p class="muted">请输入您的六位密码以继续</p>
+        <div class="password-verify-input">
+          <input type="password" id="verify-password-input" maxlength="6" inputmode="numeric" pattern="[0-9]*" placeholder="请输入6位数字密码" autocomplete="off" />
+        </div>
+        <div class="password-verify-error" id="verify-error" style="display:none;color:#ff3d8f;font-size:14px;margin-top:8px;">密码错误，请重试</div>
+        <div class="dialog-actions" style="margin-top:20px;">
+          <button type="button" class="btn" id="verify-cancel">取消</button>
+          <button type="button" class="btn primary" id="verify-submit">确认</button>
+        </div>
+      </form>
+    `;
+    
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    
+    const input = dialog.querySelector('#verify-password-input');
+    const submitBtn = dialog.querySelector('#verify-submit');
+    const cancelBtn = dialog.querySelector('#verify-cancel');
+    const errorEl = dialog.querySelector('#verify-error');
+    
+    // 聚焦输入框
+    setTimeout(() => input.focus(), 100);
+    
+    // 取消
+    cancelBtn.addEventListener('click', () => {
+      dialog.close();
+      dialog.remove();
+      resolve(false);
+    });
+    
+    // 确认
+    const verify = async () => {
+      const inputPassword = input.value.trim();
+      const savedPassword = sessionStorage.getItem('kitty_password');
+      
+      if (inputPassword === savedPassword) {
+        dialog.close();
+        dialog.remove();
+        resolve(true);
+      } else {
+        errorEl.style.display = 'block';
+        input.value = '';
+        input.focus();
+        vibrate(120);
+      }
+    };
+    
+    submitBtn.addEventListener('click', verify);
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        verify();
+      }
+    });
+    
+    // 关闭对话框
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      resolve(false);
+    });
+  });
 }
 
 
