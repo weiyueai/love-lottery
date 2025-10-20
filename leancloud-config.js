@@ -17,7 +17,7 @@ const leanCloudConfig = {
   // 👇 请替换为您自己的LeanCloud配置
   appId: "a18wkGNz65BN4p8y1jmY20J1-gzGzoHsz",
   appKey: "PowDkwnfNSBylBnqb1tp9E5M",
-  serverURL: "https://YOUR_APP_ID.lc-cn-n1-shared.com" // 或其他服务器地址
+  serverURL: "https://a18wkgnz.lc-cn-n1-shared.com" // 或其他服务器地址
 };
 
 // ============================================
@@ -41,4 +41,5 @@ export default leanCloudConfig;
 // };
 // 
 // ============================================
+
 
