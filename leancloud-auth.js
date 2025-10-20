@@ -300,8 +300,8 @@ export function getCurrentUserId() {
 // 验证设置密码
 // ============================================
 export async function verifySettingsPassword(inputPassword) {
-  const savedPassword = sessionStorage.getItem('kitty_password');
-  return inputPassword === savedPassword;
+  // 设置密码固定为 011208
+  return inputPassword === '011208';
 }
 
 // ============================================
