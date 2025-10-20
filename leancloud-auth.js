@@ -289,4 +289,3 @@ export function logout() {
   currentUserId = null;
   window.location.href = 'login.html';
 }
-
