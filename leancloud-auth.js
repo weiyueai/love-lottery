@@ -19,9 +19,19 @@ async function initLeanCloud() {
   }
 
   try {
-    // 动态导入LeanCloud SDK
-    const module = await import('https://cdn.jsdelivr.net/npm/leancloud-storage@4.15.2/dist/av-min.js');
-    AV = module.default || module;
+    // 检查是否已经加载了AV
+    if (typeof window.AV !== 'undefined') {
+      AV = window.AV;
+    } else {
+      // 动态加载LeanCloud SDK
+      await loadLeanCloudSDK();
+      AV = window.AV;
+    }
+    
+    // 验证AV对象
+    if (!AV || typeof AV.init !== 'function') {
+      throw new Error('LeanCloud SDK加载失败');
+    }
     
     // 初始化LeanCloud
     AV.init({
@@ -36,6 +46,32 @@ async function initLeanCloud() {
     console.error('❌ LeanCloud初始化失败:', error);
     return false;
   }
+}
+
+// 加载LeanCloud SDK的辅助函数
+function loadLeanCloudSDK() {
+  return new Promise((resolve, reject) => {
+    // 如果已经加载，直接返回
+    if (window.AV) {
+      resolve();
+      return;
+    }
+    
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/leancloud-storage@4.15.2/dist/av-min.js';
+    script.onload = () => {
+      // 等待一小段时间确保AV对象可用
+      setTimeout(() => {
+        if (window.AV) {
+          resolve();
+        } else {
+          reject(new Error('AV对象未找到'));
+        }
+      }, 100);
+    };
+    script.onerror = () => reject(new Error('SDK加载失败'));
+    document.head.appendChild(script);
+  });
 }
 
 // ============================================
@@ -253,4 +289,3 @@ export function logout() {
   currentUserId = null;
   window.location.href = 'login.html';
 }
-
