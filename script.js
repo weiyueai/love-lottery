@@ -37,14 +37,50 @@ async function initCloudSync() {
     // 监听云端数据变化
     const unsubscribe = await firebaseSync.listenToCloudChanges((data) => {
       // 检测到云端更新，同步到本地
+      let hasUpdates = false;
+      
       if (data.energy !== undefined && data.energy !== energy) {
+        const oldEnergy = energy;
         energy = data.energy;
         renderEnergy();
+        hasUpdates = true;
+        
+        // 通知能量变化
+        const energyChange = energy - oldEnergy;
+        if (energyChange > 0) {
+          sendNotification(
+            '☁️ 云端同步',
+            `其他设备增加了 ${energyChange} 点能量`,
+            '☁️'
+          );
+        } else if (energyChange < 0) {
+          sendNotification(
+            '☁️ 云端同步', 
+            `其他设备使用了 ${Math.abs(energyChange)} 点能量`,
+            '☁️'
+          );
+        }
       }
+      
       if (data.history && JSON.stringify(data.history) !== JSON.stringify(drawHistory)) {
+        const oldCount = drawHistory.length;
         drawHistory = data.history;
         renderHistory();
+        hasUpdates = true;
+        
+        // 通知新记录
+        const newCount = drawHistory.length;
+        if (newCount > oldCount) {
+          const newRecords = newCount - oldCount;
+          const latestRecord = drawHistory[drawHistory.length - 1];
+          sendNotification(
+            '📱 新记录同步',
+            `其他设备新增${newRecords}条记录：${latestRecord.reward}`,
+            '📱'
+          );
+        }
       }
+      
       if (data.pools && JSON.stringify(data.pools) !== JSON.stringify(POOLS)) {
         POOLS = data.pools;
       }
@@ -114,6 +150,49 @@ function saveState() {
   }
 }
 
+// ============================================
+// 通知系统
+// ============================================
+let notificationsEnabled = false;
+
+// 初始化通知权限
+async function initNotifications() {
+  if ('Notification' in window) {
+    const permission = await Notification.requestPermission();
+    notificationsEnabled = permission === 'granted';
+    console.log('🔔 通知权限:', permission);
+    return notificationsEnabled;
+  }
+  return false;
+}
+
+// 发送通知
+function sendNotification(title, body, icon = '🎁') {
+  if (!notificationsEnabled) return;
+  
+  try {
+    const notification = new Notification(title, {
+      body: body,
+      icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">' + icon + '</text></svg>',
+      badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎁</text></svg>',
+      tag: 'kitty-notification',
+      requireInteraction: false,
+      silent: false
+    });
+
+    // 3秒后自动关闭
+    setTimeout(() => notification.close(), 3000);
+    
+    // 点击通知时聚焦到窗口
+    notification.onclick = function() {
+      window.focus();
+      notification.close();
+    };
+  } catch (error) {
+    console.error('通知发送失败:', error);
+  }
+}
+
 function renderEnergy() { 
   const energyEl = $("#energy-value");
   if (energyEl) {
@@ -168,6 +247,14 @@ function addEnergy(amount, note) {
   
   console.log('Adding energy:', add, 'note:', note);
   energy += add;
+  
+  // 发送能量增加通知
+  const energyMessage = note ? `+${add} (${note})` : `+${add}`;
+  sendNotification(
+    '⚡ 恋爱能量增加！',
+    `获得能量：${energyMessage}`,
+    '⚡'
+  );
   
   // 记录到历史
   drawHistory.push({
@@ -306,6 +393,15 @@ function performDrawWithAnimation(key) {
   console.log('draw result:', record);
   
   if (record) {
+    // 发送抽奖成功通知
+    setTimeout(() => {
+      sendNotification(
+        '🎁 恭喜抽中奖品！',
+        `从 ${record.boxLabel} 抽中：${record.reward}`,
+        '🎉'
+      );
+    }, 500);
+    
     setTimeout(() => openReveal(record), 400);
   } else {
     // not enough energy
@@ -587,6 +683,9 @@ function init() {
   if (isLoggedIn) {
     initCloudSync();
   }
+  
+  // 初始化通知系统
+  initNotifications();
 }
 
 
