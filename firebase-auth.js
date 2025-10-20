@@ -1,38 +1,77 @@
 // ============================================
-// Firebase 认证和数据同步模块
+// LeanCloud 认证和数据同步模块
 // ============================================
 
-import firebaseConfig, { isFirebaseConfigured } from './firebase-config.js';
+import leanCloudConfig, { isLeanCloudConfigured } from './leancloud-config.js';
 
-// Firebase实例
-let db = null;
+// LeanCloud实例
+let AV = null;
 let currentUserId = null;
+let dataQuery = null;
 
 // ============================================
-// 初始化Firebase
+// 初始化LeanCloud
 // ============================================
-async function initFirebase() {
-  if (!isFirebaseConfigured()) {
-    console.warn('Firebase未配置，使用本地存储模式');
+async function initLeanCloud() {
+  if (!isLeanCloudConfigured()) {
+    console.warn('LeanCloud未配置，使用本地存储模式');
     return false;
   }
 
   try {
-    // 动态导入Firebase SDK
-    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js');
-    const { getFirestore, collection, doc, getDoc, setDoc, onSnapshot } = 
-      await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
-
-    // 初始化Firebase
-    const app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
+    // 检查是否已经加载了AV
+    if (typeof window.AV !== 'undefined') {
+      AV = window.AV;
+    } else {
+      // 动态加载LeanCloud SDK
+      await loadLeanCloudSDK();
+      AV = window.AV;
+    }
     
-    console.log('✅ Firebase初始化成功');
+    // 验证AV对象
+    if (!AV || typeof AV.init !== 'function') {
+      throw new Error('LeanCloud SDK加载失败');
+    }
+    
+    // 初始化LeanCloud
+    AV.init({
+      appId: leanCloudConfig.appId,
+      appKey: leanCloudConfig.appKey,
+      serverURL: leanCloudConfig.serverURL
+    });
+    
+    console.log('✅ LeanCloud初始化成功');
     return true;
   } catch (error) {
-    console.error('❌ Firebase初始化失败:', error);
+    console.error('❌ LeanCloud初始化失败:', error);
     return false;
   }
+}
+
+// 加载LeanCloud SDK的辅助函数
+function loadLeanCloudSDK() {
+  return new Promise((resolve, reject) => {
+    // 如果已经加载，直接返回
+    if (window.AV) {
+      resolve();
+      return;
+    }
+    
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/leancloud-storage@4.15.2/dist/av-min.js';
+    script.onload = () => {
+      // 等待一小段时间确保AV对象可用
+      setTimeout(() => {
+        if (window.AV) {
+          resolve();
+        } else {
+          reject(new Error('AV对象未找到'));
+        }
+      }, 100);
+    };
+    script.onerror = () => reject(new Error('SDK加载失败'));
+    document.head.appendChild(script);
+  });
 }
 
 // ============================================
@@ -52,11 +91,11 @@ async function generateUserId(password) {
 // ============================================
 export async function verifyAndLoadData(password) {
   try {
-    // 初始化Firebase
-    const firebaseReady = await initFirebase();
+    // 初始化LeanCloud
+    const leanCloudReady = await initLeanCloud();
     
-    if (!firebaseReady) {
-      // Firebase未配置，使用本地存储
+    if (!leanCloudReady) {
+      // LeanCloud未配置，使用本地存储
       return {
         success: true,
         isNew: false,
@@ -67,16 +106,29 @@ export async function verifyAndLoadData(password) {
     // 生成用户ID
     currentUserId = await generateUserId(password);
     
-    // 从Firestore加载数据
-    const { getFirestore, doc, getDoc, setDoc } = 
-      await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+    // 定义数据类
+    const UserData = AV.Object.extend('UserData');
     
-    const userDocRef = doc(getFirestore(), 'users', currentUserId);
-    const userDoc = await getDoc(userDocRef);
+    // 查询用户数据 - 处理表不存在的情况
+    let result = null;
+    try {
+      const query = new AV.Query('UserData');
+      query.equalTo('userId', currentUserId);
+      result = await query.first();
+    } catch (queryError) {
+      // 如果是404错误（表或对象不存在），这是正常的
+      if (queryError.code === 101 || queryError.message.includes('does not exist')) {
+        console.log('📝 数据表不存在，将创建新用户');
+        result = null;
+      } else {
+        // 其他错误需要抛出
+        throw queryError;
+      }
+    }
 
-    if (userDoc.exists()) {
+    if (result) {
       // 用户存在，加载数据
-      const userData = userDoc.data();
+      const userData = result.toJSON();
       
       // 保存到本地存储
       if (userData.energy !== undefined) {
@@ -89,6 +141,9 @@ export async function verifyAndLoadData(password) {
         localStorage.setItem('kitty_pools', JSON.stringify(userData.pools));
       }
 
+      // 保存对象ID用于后续更新
+      localStorage.setItem('leancloud_object_id', result.id);
+
       console.log('✅ 数据加载成功');
       return {
         success: true,
@@ -96,20 +151,23 @@ export async function verifyAndLoadData(password) {
         message: '欢迎回来！'
       };
     } else {
-      // 新用户，创建账号
+      // 新用户，创建数据
       const localEnergy = localStorage.getItem('kitty_energy') || '0';
       const localHistory = localStorage.getItem('kitty_history') || '[]';
       const localPools = localStorage.getItem('kitty_pools') || 'null';
 
-      const initialData = {
-        energy: Number(localEnergy),
-        history: JSON.parse(localHistory),
-        pools: localPools !== 'null' ? JSON.parse(localPools) : null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+      const userDataObj = new UserData();
+      userDataObj.set('userId', currentUserId);
+      userDataObj.set('energy', Number(localEnergy));
+      userDataObj.set('history', JSON.parse(localHistory));
+      userDataObj.set('pools', localPools !== 'null' ? JSON.parse(localPools) : null);
+      userDataObj.set('createdAt', new Date());
+      userDataObj.set('updatedAt', new Date());
 
-      await setDoc(userDocRef, initialData);
+      const savedObj = await userDataObj.save();
+      
+      // 保存对象ID
+      localStorage.setItem('leancloud_object_id', savedObj.id);
       
       console.log('✅ 账号创建成功');
       return {
@@ -131,21 +189,35 @@ export async function verifyAndLoadData(password) {
 // 同步数据到云端
 // ============================================
 export async function syncToCloud(data) {
-  if (!db || !currentUserId) {
+  if (!AV || !currentUserId) {
     console.log('📱 未连接云端，仅保存到本地');
     return false;
   }
 
   try {
-    const { getFirestore, doc, setDoc, serverTimestamp } = 
-      await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+    const objectId = localStorage.getItem('leancloud_object_id');
     
-    const userDocRef = doc(getFirestore(), 'users', currentUserId);
+    if (!objectId) {
+      console.error('❌ 未找到对象ID');
+      return false;
+    }
+
+    const UserData = AV.Object.extend('UserData');
+    const userDataObj = AV.Object.createWithoutData('UserData', objectId);
     
-    await setDoc(userDocRef, {
-      ...data,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+    // 更新数据
+    if (data.energy !== undefined) {
+      userDataObj.set('energy', data.energy);
+    }
+    if (data.history) {
+      userDataObj.set('history', data.history);
+    }
+    if (data.pools) {
+      userDataObj.set('pools', data.pools);
+    }
+    userDataObj.set('updatedAt', new Date());
+
+    await userDataObj.save();
 
     console.log('☁️ 数据已同步到云端');
     return true;
@@ -156,28 +228,47 @@ export async function syncToCloud(data) {
 }
 
 // ============================================
-// 实时监听云端数据变化
+// 实时监听云端数据变化（轮询方式）
 // ============================================
 export async function listenToCloudChanges(callback) {
-  if (!db || !currentUserId) {
+  if (!AV || !currentUserId) {
     return null;
   }
 
   try {
-    const { getFirestore, doc, onSnapshot } = 
-      await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+    const objectId = localStorage.getItem('leancloud_object_id');
     
-    const userDocRef = doc(getFirestore(), 'users', currentUserId);
-    
-    const unsubscribe = onSnapshot(userDocRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const data = docSnapshot.data();
-        callback(data);
-        console.log('🔄 检测到云端数据更新');
-      }
-    });
+    if (!objectId) {
+      return null;
+    }
 
-    return unsubscribe;
+    // LeanCloud免费版不支持实时通信，使用轮询
+    let lastUpdated = new Date();
+
+    const checkForUpdates = async () => {
+      try {
+        const UserData = AV.Object.extend('UserData');
+        const query = new AV.Query('UserData');
+        const obj = await query.get(objectId);
+        
+        const objData = obj.toJSON();
+        const objUpdated = new Date(objData.updatedAt);
+
+        if (objUpdated > lastUpdated) {
+          lastUpdated = objUpdated;
+          callback(objData);
+          console.log('🔄 检测到云端数据更新');
+        }
+      } catch (error) {
+        console.error('轮询错误:', error);
+      }
+    };
+
+    // 每30秒检查一次更新
+    const intervalId = setInterval(checkForUpdates, 30000);
+
+    // 返回取消监听的函数
+    return () => clearInterval(intervalId);
   } catch (error) {
     console.error('❌ 监听失败:', error);
     return null;
@@ -205,7 +296,16 @@ export async function verifySettingsPassword(inputPassword) {
 export function logout() {
   sessionStorage.removeItem('kitty_logged_in');
   sessionStorage.removeItem('kitty_password');
+  localStorage.removeItem('leancloud_object_id');
   currentUserId = null;
   window.location.href = 'login.html';
 }
 
+// ============================================
+// 模块加载确认
+// ============================================
+console.log('✅ leancloud-auth.js 模块加载成功，函数已导出:', {
+  verifyAndLoadData: typeof verifyAndLoadData,
+  syncToCloud: typeof syncToCloud,
+  listenToCloudChanges: typeof listenToCloudChanges
+});
