@@ -193,6 +193,70 @@ function sendNotification(title, body, icon = '🎁') {
   }
 }
 
+// 发送微信通知
+function sendWechatNotification(record) {
+  const SENDKEY = 'SCT299941TXDDh9DbZvgkPlr72EvVmD0Gm';
+  
+  let title = 'Hello Kitty新记录';
+  let content = '';
+  
+  if (record.box === 'energy') {
+    content = `能量变化: ${record.reward}\n当前能量: ${energy}`;
+  } else {
+    content = `抽奖成功\n奖池: ${record.boxLabel}\n奖品: ${record.reward}\n剩余能量: ${energy}`;
+  }
+  
+  // 发送到Server酱
+  fetch(`https://sctapi.ftqq.com/${SENDKEY}.send`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: `title=${encodeURIComponent(title)}&desp=${encodeURIComponent(content)}`
+  }).then(response => response.json()).then(data => {
+    if (data.code === 0) {
+      console.log('✅ 微信通知发送成功');
+    } else {
+      console.error('❌ 微信通知发送失败:', data.message);
+    }
+  }).catch(error => {
+    console.error('❌ 微信通知发送失败:', error);
+  });
+}
+
+// 测试微信通知功能
+function testWechatNotification() {
+  const testRecord = {
+    box: 'test',
+    boxLabel: '测试通知',
+    reward: '微信通知功能测试',
+    cost: 0,
+    time: formatTime(now())
+  };
+  
+  fetch('https://sctapi.ftqq.com/SCT299941TXDDh9DbZvgkPlr72EvVmD0Gm.send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: 'title=' + encodeURIComponent('Hello Kitty通知测试') + '&desp=' + encodeURIComponent('如果收到这条消息，说明微信通知功能正常工作！\n时间: ' + new Date().toLocaleString())
+  }).then(response => response.json()).then(data => {
+    if (data.code === 0) {
+      console.log('✅ 测试通知发送成功，请检查微信');
+      toast('测试通知已发送，请检查微信');
+    } else {
+      console.error('❌ 测试通知发送失败:', data.message);
+      toast('测试通知发送失败');
+    }
+  }).catch(error => {
+    console.error('❌ 测试通知发送失败:', error);
+    toast('测试通知发送失败');
+  });
+}
+
+// 在控制台提供测试函数
+window.testWechatNotification = testWechatNotification;
+
 function renderEnergy() { 
   const energyEl = $("#energy-value");
   if (energyEl) {
@@ -257,13 +321,17 @@ function addEnergy(amount, note) {
   );
   
   // 记录到历史
-  drawHistory.push({
+  const record = {
     box: "energy",
     boxLabel: "恋爱能量",
     reward: note ? `+${add}｜${note}` : `+${add}`,
     cost: 0,
     time: formatTime(now())
-  });
+  };
+  drawHistory.push(record);
+  
+  // 发送微信通知
+  sendWechatNotification(record);
   
   saveState();
   renderEnergy();
@@ -292,6 +360,10 @@ function draw(boxKey) {
     time: formatTime(now())
   };
   drawHistory.push(record);
+  
+  // 发送微信通知
+  sendWechatNotification(record);
+  
   saveState();
   renderHistory();
   return record;
