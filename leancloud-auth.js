@@ -161,8 +161,6 @@ export async function verifyAndLoadData(password) {
       userDataObj.set('energy', Number(localEnergy));
       userDataObj.set('history', JSON.parse(localHistory));
       userDataObj.set('pools', localPools !== 'null' ? JSON.parse(localPools) : null);
-      userDataObj.set('createdAt', new Date());
-      userDataObj.set('updatedAt', new Date());
 
       const savedObj = await userDataObj.save();
       
@@ -215,7 +213,6 @@ export async function syncToCloud(data) {
     if (data.pools) {
       userDataObj.set('pools', data.pools);
     }
-    userDataObj.set('updatedAt', new Date());
 
     await userDataObj.save();
 
@@ -300,3 +297,7 @@ export function logout() {
   currentUserId = null;
   window.location.href = 'login.html';
 }
+
+// ============================================
+// 模块初始化完成
+// ============================================

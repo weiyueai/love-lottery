@@ -299,6 +299,7 @@
 
       // 验证或创建账号
       async function verifyPassword(pwd) {
+        console.log('🚀 开始验证密码:', pwd);
         showLoading(true, '正在验证...');
         
         try {
@@ -310,7 +311,7 @@
             const lcConfig = await import('./leancloud-config.js');
             if (lcConfig.isLeanCloudConfigured()) {
               console.log('🌐 使用LeanCloud');
-              const lcModule = await import('./leancloud-auth.js');
+              const lcModule = await import('./leancloud-auth.js?v=' + Date.now());
               verifyAndLoadData = lcModule.verifyAndLoadData;
             } else {
               throw new Error('LeanCloud未配置');
@@ -318,7 +319,7 @@
           } catch (lcError) {
             // LeanCloud未配置，尝试Firebase
             console.log('🌐 使用Firebase');
-            const fbModule = await import('./firebase-auth.js');
+            const fbModule = await import('./firebase-auth.js?v=' + Date.now());
             verifyAndLoadData = fbModule.verifyAndLoadData;
           }
           

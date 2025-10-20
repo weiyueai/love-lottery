@@ -20,14 +20,14 @@ async function initCloudSync() {
       const lcConfig = await import('./leancloud-config.js');
       if (lcConfig.isLeanCloudConfigured()) {
         console.log('🌐 使用LeanCloud');
-        module = await import('./leancloud-auth.js');
+               module = await import('./leancloud-auth.js?v=' + Date.now());
       } else {
         throw new Error('LeanCloud未配置');
       }
     } catch (lcError) {
       // LeanCloud未配置，尝试Firebase
       console.log('🌐 使用Firebase');
-      module = await import('./firebase-auth.js');
+      module = await import('./firebase-auth.js?v=' + Date.now());
     }
     
     firebaseSync = module;
