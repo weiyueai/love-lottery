@@ -109,11 +109,22 @@ export async function verifyAndLoadData(password) {
     // 定义数据类
     const UserData = AV.Object.extend('UserData');
     
-    // 查询用户数据
-    const query = new AV.Query('UserData');
-    query.equalTo('userId', currentUserId);
-    
-    const result = await query.first();
+    // 查询用户数据 - 处理表不存在的情况
+    let result = null;
+    try {
+      const query = new AV.Query('UserData');
+      query.equalTo('userId', currentUserId);
+      result = await query.first();
+    } catch (queryError) {
+      // 如果是404错误（表或对象不存在），这是正常的
+      if (queryError.code === 101 || queryError.message.includes('does not exist')) {
+        console.log('📝 数据表不存在，将创建新用户');
+        result = null;
+      } else {
+        // 其他错误需要抛出
+        throw queryError;
+      }
+    }
 
     if (result) {
       // 用户存在，加载数据
