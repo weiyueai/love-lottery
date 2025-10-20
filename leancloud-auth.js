@@ -187,6 +187,23 @@ export async function verifyAndLoadData(password) {
 // 同步数据到云端
 // ============================================
 export async function syncToCloud(data) {
+  // 尝试恢复用户ID
+  if (!currentUserId) {
+    const savedPassword = sessionStorage.getItem('kitty_password');
+    if (savedPassword) {
+      currentUserId = await generateUserId(savedPassword);
+    }
+  }
+  
+  // 尝试重新初始化AV对象
+  if (!AV) {
+    const initSuccess = await initLeanCloud();
+    if (!initSuccess) {
+      console.log('📱 未连接云端，仅保存到本地');
+      return false;
+    }
+  }
+  
   if (!AV || !currentUserId) {
     console.log('📱 未连接云端，仅保存到本地');
     return false;
