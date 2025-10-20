@@ -37,14 +37,50 @@ async function initCloudSync() {
     // 监听云端数据变化
     const unsubscribe = await firebaseSync.listenToCloudChanges((data) => {
       // 检测到云端更新，同步到本地
+      let hasUpdates = false;
+      
       if (data.energy !== undefined && data.energy !== energy) {
+        const oldEnergy = energy;
         energy = data.energy;
         renderEnergy();
+        hasUpdates = true;
+        
+        // 通知能量变化
+        const energyChange = energy - oldEnergy;
+        if (energyChange > 0) {
+          sendNotification(
+            '☁️ 云端同步',
+            `其他设备增加了 ${energyChange} 点能量`,
+            '☁️'
+          );
+        } else if (energyChange < 0) {
+          sendNotification(
+            '☁️ 云端同步', 
+            `其他设备使用了 ${Math.abs(energyChange)} 点能量`,
+            '☁️'
+          );
+        }
       }
+      
       if (data.history && JSON.stringify(data.history) !== JSON.stringify(drawHistory)) {
+        const oldCount = drawHistory.length;
         drawHistory = data.history;
         renderHistory();
+        hasUpdates = true;
+        
+        // 通知新记录
+        const newCount = drawHistory.length;
+        if (newCount > oldCount) {
+          const newRecords = newCount - oldCount;
+          const latestRecord = drawHistory[drawHistory.length - 1];
+          sendNotification(
+            '📱 新记录同步',
+            `其他设备新增${newRecords}条记录：${latestRecord.reward}`,
+            '📱'
+          );
+        }
       }
+      
       if (data.pools && JSON.stringify(data.pools) !== JSON.stringify(POOLS)) {
         POOLS = data.pools;
       }
@@ -114,6 +150,113 @@ function saveState() {
   }
 }
 
+// ============================================
+// 通知系统
+// ============================================
+let notificationsEnabled = false;
+
+// 初始化通知权限
+async function initNotifications() {
+  if ('Notification' in window) {
+    const permission = await Notification.requestPermission();
+    notificationsEnabled = permission === 'granted';
+    console.log('🔔 通知权限:', permission);
+    return notificationsEnabled;
+  }
+  return false;
+}
+
+// 发送通知
+function sendNotification(title, body, icon = '🎁') {
+  if (!notificationsEnabled) return;
+  
+  try {
+    const notification = new Notification(title, {
+      body: body,
+      icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">' + icon + '</text></svg>',
+      badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎁</text></svg>',
+      tag: 'kitty-notification',
+      requireInteraction: false,
+      silent: false
+    });
+
+    // 3秒后自动关闭
+    setTimeout(() => notification.close(), 3000);
+    
+    // 点击通知时聚焦到窗口
+    notification.onclick = function() {
+      window.focus();
+      notification.close();
+    };
+  } catch (error) {
+    console.error('通知发送失败:', error);
+  }
+}
+
+// 发送微信通知
+function sendWechatNotification(record) {
+  const SENDKEY = 'SCT299941TXDDh9DbZvgkPlr72EvVmD0Gm';
+  
+  let title = 'Hello Kitty新记录';
+  let content = '';
+  
+  if (record.box === 'energy') {
+    content = `能量变化: ${record.reward}\n当前能量: ${energy}`;
+  } else {
+    content = `抽奖成功\n奖池: ${record.boxLabel}\n奖品: ${record.reward}\n剩余能量: ${energy}`;
+  }
+  
+  // 发送到Server酱
+  fetch(`https://sctapi.ftqq.com/${SENDKEY}.send`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: `title=${encodeURIComponent(title)}&desp=${encodeURIComponent(content)}`
+  }).then(response => response.json()).then(data => {
+    if (data.code === 0) {
+      console.log('✅ 微信通知发送成功');
+    } else {
+      console.error('❌ 微信通知发送失败:', data.message);
+    }
+  }).catch(error => {
+    console.error('❌ 微信通知发送失败:', error);
+  });
+}
+
+// 测试微信通知功能
+function testWechatNotification() {
+  const testRecord = {
+    box: 'test',
+    boxLabel: '测试通知',
+    reward: '微信通知功能测试',
+    cost: 0,
+    time: formatTime(now())
+  };
+  
+  fetch('https://sctapi.ftqq.com/SCT299941TXDDh9DbZvgkPlr72EvVmD0Gm.send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: 'title=' + encodeURIComponent('Hello Kitty通知测试') + '&desp=' + encodeURIComponent('如果收到这条消息，说明微信通知功能正常工作！\n时间: ' + new Date().toLocaleString())
+  }).then(response => response.json()).then(data => {
+    if (data.code === 0) {
+      console.log('✅ 测试通知发送成功，请检查微信');
+      toast('测试通知已发送，请检查微信');
+    } else {
+      console.error('❌ 测试通知发送失败:', data.message);
+      toast('测试通知发送失败');
+    }
+  }).catch(error => {
+    console.error('❌ 测试通知发送失败:', error);
+    toast('测试通知发送失败');
+  });
+}
+
+// 在控制台提供测试函数
+window.testWechatNotification = testWechatNotification;
+
 function renderEnergy() { 
   const energyEl = $("#energy-value");
   if (energyEl) {
@@ -169,14 +312,26 @@ function addEnergy(amount, note) {
   console.log('Adding energy:', add, 'note:', note);
   energy += add;
   
+  // 发送能量增加通知
+  const energyMessage = note ? `+${add} (${note})` : `+${add}`;
+  sendNotification(
+    '⚡ 恋爱能量增加！',
+    `获得能量：${energyMessage}`,
+    '⚡'
+  );
+  
   // 记录到历史
-  drawHistory.push({
+  const record = {
     box: "energy",
     boxLabel: "恋爱能量",
     reward: note ? `+${add}｜${note}` : `+${add}`,
     cost: 0,
     time: formatTime(now())
-  });
+  };
+  drawHistory.push(record);
+  
+  // 发送微信通知
+  sendWechatNotification(record);
   
   saveState();
   renderEnergy();
@@ -205,6 +360,10 @@ function draw(boxKey) {
     time: formatTime(now())
   };
   drawHistory.push(record);
+  
+  // 发送微信通知
+  sendWechatNotification(record);
+  
   saveState();
   renderHistory();
   return record;
@@ -306,6 +465,15 @@ function performDrawWithAnimation(key) {
   console.log('draw result:', record);
   
   if (record) {
+    // 发送抽奖成功通知
+    setTimeout(() => {
+      sendNotification(
+        '🎁 恭喜抽中奖品！',
+        `从 ${record.boxLabel} 抽中：${record.reward}`,
+        '🎉'
+      );
+    }, 500);
+    
     setTimeout(() => openReveal(record), 400);
   } else {
     // not enough energy
@@ -587,6 +755,9 @@ function init() {
   if (isLoggedIn) {
     initCloudSync();
   }
+  
+  // 初始化通知系统
+  initNotifications();
 }
 
 
