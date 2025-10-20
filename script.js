@@ -715,9 +715,9 @@ function verifyPasswordDialog() {
     // 确认
     const verify = async () => {
       const inputPassword = input.value.trim();
-      const savedPassword = sessionStorage.getItem('kitty_password');
       
-      if (inputPassword === savedPassword) {
+      // 设置密码固定为 011208
+      if (inputPassword === '011208') {
         dialog.close();
         dialog.remove();
         resolve(true);
