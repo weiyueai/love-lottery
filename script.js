@@ -30,8 +30,9 @@ async function initCloudSync() {
       module = await import('./firebase-auth.js?v=' + Date.now());
     }
     
-    firebaseSync = module;
-    cloudSyncEnabled = true;
+    // 设置全局变量
+    window.firebaseSync = firebaseSync = module;
+    window.cloudSyncEnabled = cloudSyncEnabled = true;
     console.log('✅ 云端同步已启用');
     
     // 监听云端数据变化
@@ -283,6 +284,48 @@ function testWechatNotification() {
 
 // 在控制台提供测试函数
 window.testWechatNotification = testWechatNotification;
+
+// ============================================
+// 主动从云端拉取数据
+// ============================================
+async function pullDataFromCloud() {
+  if (!cloudSyncEnabled || !firebaseSync) {
+    throw new Error('云端同步未启用');
+  }
+  
+  const objectId = localStorage.getItem('leancloud_object_id');
+  if (!objectId) {
+    throw new Error('未找到云端数据ID');
+  }
+  
+  try {
+    // 使用LeanCloud模块获取当前用户的最新数据
+    const userId = await firebaseSync.getCurrentUserId();
+    if (!userId) {
+      throw new Error('无法获取用户ID');
+    }
+    
+    // 调用verifyAndLoadData来拉取最新数据
+    const password = sessionStorage.getItem('kitty_password');
+    if (!password) {
+      throw new Error('未找到登录密码');
+    }
+    
+    const result = await firebaseSync.verifyAndLoadData(password);
+    if (!result.success) {
+      throw new Error(result.message);
+    }
+    
+    // 重新加载本地数据（此时已被verifyAndLoadData更新）
+    loadState();
+    
+    console.log('📱 已从云端拉取最新数据');
+    return true;
+  } catch (error) {
+    console.error('❌ 拉取云端数据失败:', error);
+    throw error;
+  }
+}
 
 function renderEnergy() { 
   const energyEl = $("#energy-value");
@@ -763,7 +806,7 @@ function updateDaysDisplay() {
 }
 
 /* Init */
-function init() {
+async function init() {
   // 检查登录状态
   const isLoggedIn = sessionStorage.getItem('kitty_logged_in') === 'true';
   if (!isLoggedIn && window.location.pathname.indexOf('login.html') === -1) {
@@ -771,17 +814,30 @@ function init() {
     return;
   }
   
+  // 先加载本地数据
   loadState();
+  
+  // 如果已登录，优先从云端同步最新数据
+  if (isLoggedIn) {
+    await initCloudSync();
+    
+    // 云端同步初始化成功后，立即拉取最新数据
+    if (cloudSyncEnabled && firebaseSync) {
+      console.log('🔄 正在从云端拉取最新数据...');
+      try {
+        await pullDataFromCloud();
+        console.log('✅ 云端数据同步完成');
+      } catch (error) {
+        console.log('⚠️ 云端数据拉取失败，使用本地数据:', error.message);
+      }
+    }
+  }
+  
   renderEnergy();
   renderHistory();
   updateDaysDisplay(); // 更新在一起天数
   bind();
   bindTapProgress();
-  
-  // 初始化云端同步
-  if (isLoggedIn) {
-    initCloudSync();
-  }
   
   // 初始化通知系统
   initNotifications();
