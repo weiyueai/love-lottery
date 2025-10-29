@@ -30,8 +30,9 @@ async function initCloudSync() {
       module = await import('./firebase-auth.js?v=' + Date.now());
     }
     
-    firebaseSync = module;
-    cloudSyncEnabled = true;
+    // 设置全局变量
+    window.firebaseSync = firebaseSync = module;
+    window.cloudSyncEnabled = cloudSyncEnabled = true;
     console.log('✅ 云端同步已启用');
     
     // 监听云端数据变化
@@ -195,7 +196,11 @@ function sendNotification(title, body, icon = '🎁') {
 
 // 发送微信通知
 function sendWechatNotification(record) {
-  const SENDKEY = 'SCT299941TXDDh9DbZvgkPlr72EvVmD0Gm';
+  // 配置多个SendKey - 添加您的第二个SendKey
+  const SENDKEYS = [
+    'SCT299941TXDDh9DbZvgkPlr72EvVmD0Gm',  // 第一个微信账号
+    'YOUR_SECOND_SENDKEY_HERE'              // 第二个微信账号 - 请替换为真实SendKey
+  ];
   
   let title = 'Hello Kitty新记录';
   let content = '';
@@ -206,56 +211,121 @@ function sendWechatNotification(record) {
     content = `抽奖成功\n奖池: ${record.boxLabel}\n奖品: ${record.reward}\n剩余能量: ${energy}`;
   }
   
-  // 发送到Server酱
-  fetch(`https://sctapi.ftqq.com/${SENDKEY}.send`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: `title=${encodeURIComponent(title)}&desp=${encodeURIComponent(content)}`
-  }).then(response => response.json()).then(data => {
-    if (data.code === 0) {
-      console.log('✅ 微信通知发送成功');
-    } else {
-      console.error('❌ 微信通知发送失败:', data.message);
+  // 同时发送到所有配置的微信账号
+  SENDKEYS.forEach((sendkey, index) => {
+    if (sendkey && sendkey !== 'YOUR_SECOND_SENDKEY_HERE') {
+      fetch(`https://sctapi.ftqq.com/${sendkey}.send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: `title=${encodeURIComponent(title)}&desp=${encodeURIComponent(content)}`
+      }).then(response => response.json()).then(data => {
+        if (data.code === 0) {
+          console.log(`✅ 微信通知${index + 1}发送成功`);
+        } else {
+          console.error(`❌ 微信通知${index + 1}发送失败:`, data.message);
+        }
+      }).catch(error => {
+        console.error(`❌ 微信通知${index + 1}发送失败:`, error);
+      });
     }
-  }).catch(error => {
-    console.error('❌ 微信通知发送失败:', error);
   });
 }
 
 // 测试微信通知功能
 function testWechatNotification() {
-  const testRecord = {
-    box: 'test',
-    boxLabel: '测试通知',
-    reward: '微信通知功能测试',
-    cost: 0,
-    time: formatTime(now())
-  };
+  // 配置多个SendKey - 与通知函数保持一致
+  const SENDKEYS = [
+    'SCT299941TXDDh9DbZvgkPlr72EvVmD0Gm',  // 第一个微信账号
+    'YOUR_SECOND_SENDKEY_HERE'              // 第二个微信账号 - 请替换为真实SendKey
+  ];
   
-  fetch('https://sctapi.ftqq.com/SCT299941TXDDh9DbZvgkPlr72EvVmD0Gm.send', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: 'title=' + encodeURIComponent('Hello Kitty通知测试') + '&desp=' + encodeURIComponent('如果收到这条消息，说明微信通知功能正常工作！\n时间: ' + new Date().toLocaleString())
-  }).then(response => response.json()).then(data => {
-    if (data.code === 0) {
-      console.log('✅ 测试通知发送成功，请检查微信');
-      toast('测试通知已发送，请检查微信');
-    } else {
-      console.error('❌ 测试通知发送失败:', data.message);
-      toast('测试通知发送失败');
+  const testTitle = 'Hello Kitty通知测试';
+  const testContent = '如果收到这条消息，说明微信通知功能正常工作！\n时间: ' + new Date().toLocaleString();
+  
+  let successCount = 0;
+  let totalCount = 0;
+  
+  // 发送到所有配置的微信账号
+  SENDKEYS.forEach((sendkey, index) => {
+    if (sendkey && sendkey !== 'YOUR_SECOND_SENDKEY_HERE') {
+      totalCount++;
+      fetch(`https://sctapi.ftqq.com/${sendkey}.send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: `title=${encodeURIComponent(testTitle)}&desp=${encodeURIComponent(testContent)}`
+      }).then(response => response.json()).then(data => {
+        if (data.code === 0) {
+          successCount++;
+          console.log(`✅ 测试通知${index + 1}发送成功`);
+          
+          // 所有通知发送完毕后显示结果
+          if (successCount === totalCount) {
+            toast(`测试通知已发送到${totalCount}个微信，请检查微信`);
+          }
+        } else {
+          console.error(`❌ 测试通知${index + 1}发送失败:`, data.message);
+          toast(`测试通知${index + 1}发送失败`);
+        }
+      }).catch(error => {
+        console.error(`❌ 测试通知${index + 1}发送失败:`, error);
+        toast(`测试通知${index + 1}发送失败`);
+      });
     }
-  }).catch(error => {
-    console.error('❌ 测试通知发送失败:', error);
-    toast('测试通知发送失败');
   });
+  
+  if (totalCount === 0) {
+    toast('请先配置有效的SendKey');
+  }
 }
 
 // 在控制台提供测试函数
 window.testWechatNotification = testWechatNotification;
+
+// ============================================
+// 主动从云端拉取数据
+// ============================================
+async function pullDataFromCloud() {
+  if (!cloudSyncEnabled || !firebaseSync) {
+    throw new Error('云端同步未启用');
+  }
+  
+  const objectId = localStorage.getItem('leancloud_object_id');
+  if (!objectId) {
+    throw new Error('未找到云端数据ID');
+  }
+  
+  try {
+    // 使用LeanCloud模块获取当前用户的最新数据
+    const userId = await firebaseSync.getCurrentUserId();
+    if (!userId) {
+      throw new Error('无法获取用户ID');
+    }
+    
+    // 调用verifyAndLoadData来拉取最新数据
+    const password = sessionStorage.getItem('kitty_password');
+    if (!password) {
+      throw new Error('未找到登录密码');
+    }
+    
+    const result = await firebaseSync.verifyAndLoadData(password);
+    if (!result.success) {
+      throw new Error(result.message);
+    }
+    
+    // 重新加载本地数据（此时已被verifyAndLoadData更新）
+    loadState();
+    
+    console.log('📱 已从云端拉取最新数据');
+    return true;
+  } catch (error) {
+    console.error('❌ 拉取云端数据失败:', error);
+    throw error;
+  }
+}
 
 function renderEnergy() { 
   const energyEl = $("#energy-value");
@@ -736,7 +806,7 @@ function updateDaysDisplay() {
 }
 
 /* Init */
-function init() {
+async function init() {
   // 检查登录状态
   const isLoggedIn = sessionStorage.getItem('kitty_logged_in') === 'true';
   if (!isLoggedIn && window.location.pathname.indexOf('login.html') === -1) {
@@ -744,17 +814,30 @@ function init() {
     return;
   }
   
+  // 先加载本地数据
   loadState();
+  
+  // 如果已登录，优先从云端同步最新数据
+  if (isLoggedIn) {
+    await initCloudSync();
+    
+    // 云端同步初始化成功后，立即拉取最新数据
+    if (cloudSyncEnabled && firebaseSync) {
+      console.log('🔄 正在从云端拉取最新数据...');
+      try {
+        await pullDataFromCloud();
+        console.log('✅ 云端数据同步完成');
+      } catch (error) {
+        console.log('⚠️ 云端数据拉取失败，使用本地数据:', error.message);
+      }
+    }
+  }
+  
   renderEnergy();
   renderHistory();
   updateDaysDisplay(); // 更新在一起天数
   bind();
   bindTapProgress();
-  
-  // 初始化云端同步
-  if (isLoggedIn) {
-    initCloudSync();
-  }
   
   // 初始化通知系统
   initNotifications();
